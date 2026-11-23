@@ -929,6 +929,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   }
   function tone(freq, dur, type='sine', vol=0.05, slideTo=null) {
     if (!audioCtx || settings.muted) return;
+    try {
     const t = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -940,6 +941,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.start(t); osc.stop(t + dur + 0.02);
+    } catch(_e) {}
   }
   function sfx(name) {
     if (settings.muted) return;
@@ -1405,7 +1407,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   // ============================================================
   let renderer;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference:'high-performance', alpha:false, stencil:false });
+    renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference:'high-performance', alpha:false, stencil:false });
   } catch (err) {
     document.body.innerHTML = '<div style="padding:30px;font-family:system-ui;color:#fff;background:#0b1220;height:100vh"><h2>WebGL indisponível</h2><p>Ative a aceleração de hardware no navegador para jogar.</p></div>';
     return;
