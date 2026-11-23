@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Supermercado 3D</title>
+<style>
+  :root { --bg:#101726; --panel:#1d2638; --panel2:#27314a; --accent:#52d1a5; --warn:#f6c85f; --danger:#ff7373; --text:#edf3ff; --muted:#9fb0ca; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#000; color:var(--text); overflow:hidden; }
+  #app { height:100vh; width:100vw; }
+  #view { position:relative; width:100%; height:100%; overflow:hidden; }
+  canvas { display:block; width:100%; height:100%; }
+  #hud { position:absolute; left:12px; top:12px; display:flex; flex-wrap:wrap; gap:8px; z-index:10; max-width:calc(100% - 24px); pointer-events:none; }
+  .stat { background:rgba(10,16,28,.45); border:1px solid rgba(120,150,190,.25); padding:7px 10px; border-radius:8px; font-size:.82rem; backdrop-filter: blur(4px); }
+  .stat b { color:var(--accent); }
+  .stat.warn b { color:var(--warn); }
+  #hint { position:absolute; left:12px; bottom:12px; background:rgba(10,16,28,.45); border:1px solid rgba(120,150,190,.2); padding:8px 10px; border-radius:8px; font-size:.76rem; color:#dce6f6; max-width:min(560px, calc(100% - 24px)); pointer-events:none; }
+  #prompt { position:absolute; left:50%; top:54%; transform:translate(-50%,-50%); background:rgba(8,14,24,.72); border:1px solid rgba(130,170,210,.35); padding:10px 14px; border-radius:10px; font-size:.95rem; z-index:16; display:none; white-space:nowrap; backdrop-filter: blur(4px); }
+  #prompt kbd, kbd { background:#111827; border:1px solid #445; padding:1px 6px; border-radius:4px; font-size:.8em; }
+  #crosshair { display:block !important; }
+  #menuBtn { position:absolute; top:12px; right:12px; z-index:20; background:rgba(10,16,28,.55); border:1px solid rgba(120,150,190,.35); color:#fff; padding:8px 12px; border-radius:8px; font:inherit; cursor:pointer; }
+  #actionBtn { position:absolute; right:24px; bottom:170px; width:72px; height:72px; border-radius:50%; z-index:20; pointer-events:auto; background:rgba(47,122,99,.88); border:2px solid #52d1a5; color:#fff; font-weight:700; font-size:.72rem; display:none; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,.35); user-select:none; touch-action:manipulation; }
+  #actionBtn.show { display:flex; }
+  #side { position:absolute; top:0; right:0; width:min(360px, 92vw); height:100%; background:rgba(16,23,38,.96); border-left:1px solid #31405d; padding:12px; overflow:auto; display:none; flex-direction:column; gap:10px; z-index:30; backdrop-filter: blur(6px); }
+  #side.show { display:flex; }
+  .panel { background:var(--panel); border:1px solid #394a69; border-radius:12px; padding:12px; }
+  .panel h2 { font-size:1rem; margin-bottom:8px; }
+  .small { color:var(--muted); font-size:.82rem; line-height:1.35; }
+  button { background:#364766; color:var(--text); border:1px solid #52688f; padding:8px 10px; border-radius:8px; cursor:pointer; font:inherit; }
+  button:hover { filter:brightness(1.08); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.primary { background:#2f7a63; border-color:#52d1a5; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .stock-list { display:flex; flex-direction:column; gap:6px; max-height:280px; overflow:auto; }
+  .stock-item { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; background:var(--panel2); padding:8px; border-radius:8px; font-size:.84rem; }
+  .stock-item .meta { color:var(--muted); font-size:.77rem; }
+  .stock-item button { font-size:.78rem; padding:6px 8px; }
+  .log { max-height:180px; overflow:auto; font-size:.78rem; background:#121a29; border:1px solid #34445f; border-radius:8px; padding:8px; }
+  .log div { padding:3px 0; border-bottom:1px solid #263149; }
+  .log div:last-child { border-bottom:none; }
+  .modal-back { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; padding:16px; z-index:50; }
+  .modal-back.show { display:flex; }
+  .modal { width:min(520px,100%); background:#232d42; border:1px solid #4b5e82; border-radius:14px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+  .modal h3 { margin-bottom:10px; }
+  .receipt { background:#f7f4ea; color:#222; border-radius:8px; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.9rem; margin:10px 0; }
+  .receipt .line { display:flex; justify-content:space-between; gap:10px; }
+  .receipt .total { border-top:1px dashed #777; margin-top:6px; padding-top:6px; font-weight:700; }
+  .cash-grid { display:grid; grid-template-columns: repeat(4,1fr); gap:8px; margin:10px 0; }
+  input[type="number"] { width:100%; padding:10px; border-radius:8px; border:1px solid #5b6d90; background:#151d2d; color:var(--text); font-size:1rem; }
+  .feedback { min-height:24px; margin-top:8px; font-size:.9rem; }
+  .good { color:#7ee2b8; } .bad { color:#ff9494; }
+  #mobileControls { display:none; position:absolute; inset:0; z-index:14; pointer-events:none; }
+  #mobileControls.show { display:block; }
+  #joyZone { position:absolute; left:18px; bottom:18px; width:140px; height:140px; pointer-events:auto; touch-action:none; }
+  #joyBase { position:absolute; inset:0; border-radius:50%; background:rgba(255,255,255,.08); border:2px solid rgba(255,255,255,.25); }
+  #joyKnob { position:absolute; left:50%; top:50%; width:56px; height:56px; margin-left:-28px; margin-top:-28px; border-radius:50%; background:rgba(82,209,165,.35); border:2px solid rgba(82,209,165,.8); box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  #lookZone { position:absolute; right:0; top:0; bottom:0; left:45%; pointer-events:auto; touch-action:none; }
+  @media (pointer: fine) { #joyZone, #lookZone { display:none !important; } }
+  #camToggleMobile { position:absolute; right:24px; bottom:24px; pointer-events:auto; padding:8px 10px; font-size:.75rem; border-radius:8px; background:rgba(20,28,44,.8); border:1px solid #4b607f; color:#fff; }
+  @media (max-width: 980px) { #joyZone{width:120px;height:120px;left:12px;bottom:12px;} #camToggleMobile{right:16px;bottom:16px;} }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="view">
+    <div id="hud">
+      <div class="stat">Dinheiro: <b id="moneyStat">R$ 0,00</b></div>
+      <div class="stat">Reputação: <b id="repStat">100%</b></div>
+      <div class="stat">Dia: <b id="dayStat">1</b> <span id="timeStat" style="color:#9fb0ca">08:00</span></div>
+      <div class="stat warn">Fila: <b id="queueStat">0</b></div>
+    </div>
+    <div id="hint">WASD move • Mouse olha • E interage • Tab menu</div>
+    <div id="crosshair" style="position:absolute;left:50%;top:50%;width:18px;height:18px;margin-left:-9px;margin-top:-9px;z-index:15;pointer-events:none">
+      <div style="position:absolute;left:8px;top:0;width:2px;height:18px;background:rgba(255,255,255,.95);box-shadow:0 0 2px #000"></div>
+      <div style="position:absolute;top:8px;left:0;width:18px;height:2px;background:rgba(255,255,255,.95);box-shadow:0 0 2px #000"></div>
+    </div>
+    <div id="prompt"></div>
+    <button id="menuBtn" type="button">Menu</button>
+    <button id="actionBtn" type="button">Ação</button>
+    <div id="mobileControls">
+      <div id="lookZone"></div>
+      <div id="joyZone"><div id="joyBase"></div><div id="joyKnob"></div></div>
+    </div>
+  </div>
+  <div id="side">
+    <div class="panel">
+      <h2>🏪 Supermercado 3D</h2>
+      <div class="small">Cidade ao redor, clientes comprando, caixa com troco e estoque entregue em caixas.</div>
+    </div>
+    <div class="panel">
+      <h2>Câmera</h2>
+      <div class="small" id="camStatus">Modo atual: Órbita.</div>
+      <div class="row">
+        <button class="primary" id="camBtn">Entrar em 1ª pessoa</button>
+      </div>
+      <div class="small" style="margin-top:8px">1ª pessoa: apenas movimentação (analógico/WASD) e olhar câmera. Os demais sistemas você ativa pelos painéis.</div>
+    </div>
+    <div class="panel">
+      <h2>Loja</h2>
+      <div class="small" id="storeStatus">Loja aberta: clientes podem entrar.</div>
+      <div class="row"><button class="primary" id="storeBtn">Fechar loja</button></div>
+    </div>
+    <div class="panel">
+      <h2>Caixa</h2>
+      <div id="cashierStatus" class="small">Nenhum cliente no caixa.</div>
+      <div class="row"><button class="primary" id="attendBtn">Atender próximo</button></div>
+    </div>
+    <div class="panel">
+      <h2>Depósito</h2>
+      <div class="small" style="margin-bottom:8px">Caixas entregues. Desempacote quando quiser.</div>
+      <div class="stock-list" id="boxList"></div>
+    </div>
+    <div class="panel">
+      <h2>Comprar estoque (caixas)</h2>
+      <div class="small" style="margin-bottom:8px">Compre caixas do fornecedor. Elas chegam no depósito para você desempacotar pelo painel.</div>
+      <div class="stock-list" id="stockList"></div>
+    </div>
+    <div class="panel">
+      <h2>Registro</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="checkoutModal">
+  <div class="modal">
+    <h3>🧾 Atendimento no Caixa</h3>
+    <div id="receipt" class="receipt"></div>
+    <div style="font-size:.9rem;margin-bottom:6px">Cliente pagou: <b id="paidAmount"></b></div>
+    <label for="changeInput" style="font-size:.85rem;color:#b9c7dc">Digite o troco (R$):</label>
+    <input id="changeInput" type="number" min="0" step="0.01" placeholder="0,00" />
+    <div class="cash-grid" id="quickCash"></div>
+    <div class="row">
+      <button class="primary" id="confirmChange">Confirmar troco</button>
+      <button id="closeCheckout">Fechar</button>
+    </div>
+    <div class="feedback" id="checkoutFeedback"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+(() => {
+  const view = document.getElementById('view');
+  const moneyStat = document.getElementById('moneyStat');
+  const repStat = document.getElementById('repStat');
+  const dayStat = document.getElementById('dayStat');
+  const timeStat = document.getElementById('timeStat');
+  const queueStat = document.getElementById('queueStat');
+  const cashierStatus = document.getElementById('cashierStatus');
+  const logEl = document.getElementById('log');
+  const stockList = document.getElementById('stockList');
+  const checkoutModal = document.getElementById('checkoutModal');
+  const receiptEl = document.getElementById('receipt');
+  const paidAmountEl = document.getElementById('paidAmount');
+  const changeInput = document.getElementById('changeInput');
+  const checkoutFeedback = document.getElementById('checkoutFeedback');
+  const camBtn = document.getElementById('camBtn');
+  const camStatus = document.getElementById('camStatus');
+  const crosshair = document.getElementById('crosshair');
+  const hint = document.getElementById('hint');
+  const mobileControls = document.getElementById('mobileControls');
+  const joyZone = document.getElementById('joyZone');
+  const joyKnob = document.getElementById('joyKnob');
+  const lookZone = document.getElementById('lookZone');
+  const storeBtn = document.getElementById('storeBtn');
+  const storeStatus = document.getElementById('storeStatus');
+  const boxList = document.getElementById('boxList');
+  const promptEl = document.getElementById('prompt');
+  const menuBtn = document.getElementById('menuBtn');
+  const actionBtn = document.getElementById('actionBtn');
+  const side = document.getElementById('side');
+
+  const fmt = v => 'R$ ' + v.toFixed(2).replace('.', ',');
+  const clamp = (v,a,b) => Math.max(a, Math.min(b,v));
+  const rand = (a,b) => Math.random()*(b-a)+a;
+  const choice = arr => arr[Math.floor(Math.random()*arr.length)];
+
+  const state = {
+    money: 350, reputation: 100, day: 1, minutes: 8*60,
+    customers: [], boxes: [], nextCustomerIn: 2, customerSeq: 1,
+    checkout: null, pausedForCheckout: false, deliveryTruck: null,
+    storeOpen: true,
+  };
+
+  const PRODUCTS = [
+    { id:'arroz', name:'Arroz 5kg', price:24.90, cost:14.00, color:0xe8dcc2, stock:6, max:18 },
+    { id:'feijao', name:'Feijão 1kg', price:8.50, cost:4.80, color:0x8d6b4f, stock:6, max:18 },
+    { id:'leite', name:'Leite 1L', price:5.20, cost:3.10, color:0xdff3ff, stock:6, max:18 },
+    { id:'pao', name:'Pão', price:7.00, cost:3.50, color:0xe3b97f, stock:6, max:18 },
+    { id:'cafe', name:'Café 500g', price:18.90, cost:11.00, color:0x6b4b3a, stock:6, max:18 },
+    { id:'sabao', name:'Sabão', price:12.40, cost:7.20, color:0xa7d8ff, stock:6, max:18 },
+    { id:'refri', name:'Refrigerante 2L', price:9.80, cost:5.60, color:0x7bc67b, stock:6, max:18 },
+    { id:'biscoito', name:'Biscoito', price:4.50, cost:2.20, color:0xf2c66d, stock:6, max:18 },
+  ];
+
+  function timeStr() {
+    const h = Math.floor(state.minutes/60)%24;
+    const m = Math.floor(state.minutes%60);
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  }
+  function log(msg) {
+    const d = document.createElement('div');
+    d.textContent = `[${timeStr()}] ${msg}`;
+    logEl.prepend(d);
+    while (logEl.children.length > 60) logEl.lastChild.remove();
+  }
+  function updateHUD() {
+    moneyStat.textContent = fmt(state.money);
+    repStat.textContent = Math.round(state.reputation) + '%';
+    dayStat.textContent = state.day;
+    timeStat.textContent = timeStr();
+    queueStat.textContent = state.customers.filter(c=>c.stage==='queue'||c.stage==='checkout').length;
+    const q = state.customers.find(c=>c.stage==='checkout') || state.customers.find(c=>c.stage==='queue');
+    cashierStatus.textContent = q ? (q.stage==='checkout' ? `${q.name} está no caixa aguardando troco.` : `${q.name} está na fila.`) : 'Nenhum cliente no caixa.';
+  }
+  function addFloat(text, pos, color='#ffffff') {
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText = `position:absolute;pointer-events:none;font-weight:700;font-size:14px;color:${color};text-shadow:0 1px 4px #000;transform:translate(-50%,-50%);z-index:20;white-space:nowrap;`;
+    view.appendChild(el);
+    const start = performance.now();
+    const world = pos.clone();
+    function tick(now){
+      const t = (now-start)/1000;
+      if (t>1.8) { el.remove(); return; }
+      const p = world.clone(); p.y += t*1.2;
+      p.project(camera);
+      el.style.left = ((p.x*0.5+0.5)*view.clientWidth) + 'px';
+      el.style.top = ((-p.y*0.5+0.5)*view.clientHeight - t*20) + 'px';
+      el.style.opacity = String(1 - t/1.8);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // --- Three.js setup ---
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(view.clientWidth, view.clientHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  view.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87b7e6);
+  scene.fog = new THREE.Fog(0x87b7e6, 55, 120);
+
+  const camera = new THREE.PerspectiveCamera(50, view.clientWidth/view.clientHeight, 0.1, 200);
+  camera.position.set(22, 22, 22);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, 2);
+  controls.enableDamping = true;
+  controls.maxPolarAngle = Math.PI * 0.49;
+  controls.minDistance = 10;
+  controls.maxDistance = 55;
+  controls.update();
+
+  // --- First-person camera ---
+  const cam = { mode:'orbit', yaw: Math.PI, pitch: 0, keys: {}, height: 1.7, speed: 4.2 };
+  const fpsPos = new THREE.Vector3(0, cam.height, 9);
+  let interactTarget = null; // {type:'box'|'cashier'|'store', obj, label}
+  let storeSwitchMesh = null;
+  function setCameraMode(mode) {
+    cam.mode = mode;
+    if (mode === 'fps') {
+      controls.enabled = false;
+      camera.fov = 80;
+      camera.updateProjectionMatrix();
+      camera.position.copy(fpsPos);
+      updateFpsCamera();
+      camBtn.textContent = 'Voltar para órbita';
+      camStatus.textContent = 'Modo atual: 1ª pessoa (estilo FPS).';
+      hint.textContent = 'WASD/analógico: mover • Mouse/arraste: olhar • E/Ação: interagir • Tab: menu';
+      crosshair.style.display = 'block';
+      mobileControls.classList.add('show');
+    } else {
+      controls.enabled = true;
+      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+      camera.fov = 50;
+      camera.updateProjectionMatrix();
+      camera.position.set(22,22,22);
+      controls.target.set(0,0,2);
+      controls.update();
+      camBtn.textContent = 'Entrar em 1ª pessoa';
+      camStatus.textContent = 'Modo atual: Órbita.';
+      hint.textContent = 'Arraste para girar a câmera • Scroll/pinca para zoom • Clique para interagir';
+      crosshair.style.display = 'none';
+      mobileControls.classList.remove('show');
+      resetJoystick();
+      promptEl.style.display = 'none';
+      actionBtn.classList.remove('show');
+    }
+  }
+  function updateFpsCamera() {
+    const look = new THREE.Vector3(
+      Math.sin(cam.yaw) * Math.cos(cam.pitch),
+      Math.sin(cam.pitch),
+      Math.cos(cam.yaw) * Math.cos(cam.pitch)
+    );
+    camera.position.copy(fpsPos);
+    camera.lookAt(fpsPos.clone().add(look));
+  }
+
+  camBtn.addEventListener('click', () => setCameraMode(cam.mode === 'orbit' ? 'fps' : 'orbit'));
+
+  document.addEventListener('pointerlockchange', () => {
+    if (cam.mode === 'fps') {
+      camStatus.textContent = document.pointerLockElement === renderer.domElement
+        ? 'Modo atual: 1ª pessoa (mouse travado). Esc para soltar.'
+        : 'Modo atual: 1ª pessoa. Clique na cena para travar o mouse.';
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    cam.keys[e.code] = true;
+    if (e.code === 'Tab') { e.preventDefault(); toggleMenu(); }
+    if (e.code === 'Escape') { if (side.classList.contains('show')) toggleMenu(false); }
+    if (e.code === 'KeyE') { e.preventDefault(); doInteract(); }
+    if (e.code === 'KeyV') setCameraMode(cam.mode === 'fps' ? 'orbit' : 'fps');
+  });
+  window.addEventListener('keyup', (e) => { cam.keys[e.code] = false; });
+
+  document.addEventListener('mousemove', (e) => {
+    if (cam.mode !== 'fps' || document.pointerLockElement !== renderer.domElement) return;
+    cam.yaw -= e.movementX * 0.0025;
+    cam.pitch -= e.movementY * 0.0025;
+    cam.pitch = clamp(cam.pitch, -1.35, 1.35);
+  });
+
+  // --- Mobile controls: joystick + look ---
+  const joy = { active:false, id:null, cx:0, cy:0, dx:0, dy:0, max:42 };
+  function resetJoystick() {
+    joy.active = false; joy.id = null; joy.dx = 0; joy.dy = 0;
+    joyKnob.style.transform = 'translate(0px,0px)';
+  }
+  function setJoystickFromTouch(t) {
+    const rect = joyZone.getBoundingClientRect();
+    joy.cx = rect.left + rect.width/2;
+    joy.cy = rect.top + rect.height/2;
+    let dx = t.clientX - joy.cx;
+    let dy = t.clientY - joy.cy;
+    const d = Math.hypot(dx,dy) || 1;
+    const clamped = Math.min(d, joy.max);
+    dx = dx/d * clamped; dy = dy/d * clamped;
+    joy.dx = dx / joy.max; joy.dy = dy / joy.max;
+    joyKnob.style.transform = `translate(${dx}px,${dy}px)`;
+  }
+  joyZone.addEventListener('touchstart', (e) => {
+    if (cam.mode !== 'fps') return;
+    const t = e.changedTouches[0];
+    joy.active = true; joy.id = t.identifier;
+    setJoystickFromTouch(t);
+    e.preventDefault();
+  }, {passive:false});
+  joyZone.addEventListener('touchmove', (e) => {
+    if (!joy.active) return;
+    for (const t of e.changedTouches) if (t.identifier === joy.id) setJoystickFromTouch(t);
+    e.preventDefault();
+  }, {passive:false});
+  function joyEnd(e){ for (const t of e.changedTouches) if (t.identifier === joy.id) resetJoystick(); }
+  joyZone.addEventListener('touchend', joyEnd, {passive:true});
+  joyZone.addEventListener('touchcancel', joyEnd, {passive:true});
+
+  let lookTouch = { id:null, x:0, y:0 };
+  lookZone.addEventListener('touchstart', (e) => {
+    if (cam.mode !== 'fps') return;
+    const t = e.changedTouches[0];
+    lookTouch.id = t.identifier; lookTouch.x = t.clientX; lookTouch.y = t.clientY;
+    e.preventDefault();
+  }, {passive:false});
+  lookZone.addEventListener('touchmove', (e) => {
+    if (cam.mode !== 'fps') return;
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookTouch.id) {
+        const dx = t.clientX - lookTouch.x;
+        const dy = t.clientY - lookTouch.y;
+        lookTouch.x = t.clientX; lookTouch.y = t.clientY;
+        cam.yaw -= dx * 0.0045;
+        cam.pitch -= dy * 0.0045;
+        cam.pitch = clamp(cam.pitch, -1.35, 1.35);
+      }
+    }
+    e.preventDefault();
+  }, {passive:false});
+  function lookEnd(e){ for (const t of e.changedTouches) if (t.identifier === lookTouch.id) lookTouch.id = null; }
+  lookZone.addEventListener('touchend', lookEnd, {passive:true});
+  lookZone.addEventListener('touchcancel', lookEnd, {passive:true});
+
+  function toggleMenu(force) {
+    const show = typeof force === 'boolean' ? force : !side.classList.contains('show');
+    side.classList.toggle('show', show);
+    if (show && document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+  }
+  menuBtn.addEventListener('click', () => toggleMenu());
+  actionBtn.addEventListener('click', () => doInteract());
+
+  const hemi = new THREE.HemisphereLight(0xdff0ff, 0x6a7a5a, 0.95);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xfff1d6, 1.25);
+  dir.position.set(20, 30, 15);
+  dir.castShadow = true;
+  dir.shadow.mapSize.set(2048,2048);
+  dir.shadow.camera.left = -35; dir.shadow.camera.right = 35;
+  dir.shadow.camera.top = 35; dir.shadow.camera.bottom = -35;
+  dir.shadow.camera.near = 1; dir.shadow.camera.far = 80;
+  scene.add(dir);
+
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x6d8b5a });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), groundMat);
+  ground.rotation.x = -Math.PI/2; ground.position.y = -0.01; ground.receiveShadow = true;
+  scene.add(ground);
+
+  function box(w,h,d,color,opts={}) {
+    const m = new THREE.MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.8, metalness: opts.metalness ?? 0.05, emissive: opts.emissive ?? 0x000000, emissiveIntensity: opts.emissiveIntensity ?? 0 });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+    mesh.castShadow = opts.castShadow !== false;
+    mesh.receiveShadow = opts.receiveShadow !== false;
+    return mesh;
+  }
+  function cyl(rt,rb,h,color) {
+    const m = new THREE.MeshStandardMaterial({ color, roughness:0.8 });
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,16), m);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  // --- City & street ---
+  const road = box(80, 0.1, 10, 0x444c57); road.position.set(0,0.05,20); road.receiveShadow=true; road.castShadow=false; scene.add(road);
+  const sidewalk = box(80, 0.15, 4, 0xbac3cf); sidewalk.position.set(0,0.075,14.5); sidewalk.receiveShadow=true; sidewalk.castShadow=false; scene.add(sidewalk);
+  // road stripes
+  for (let x=-36; x<=36; x+=6) { const s = box(3,0.12,0.4,0xf3d35d); s.position.set(x,0.11,20); s.castShadow=false; scene.add(s); }
+
+  function makeBuilding(x,z,w,h,d,color,roof,label) {
+    const g = new THREE.Group();
+    const b = box(w,h,d,color); b.position.y = h/2; g.add(b);
+    const r = box(w+0.4,0.5,d+0.4,roof); r.position.y = h+0.25; g.add(r);
+    // windows
+    for (let wy=1.5; wy<h-1; wy+=1.8) {
+      for (let wx=-w/2+0.8; wx<w/2-0.6; wx+=1.4) {
+        const win = box(0.7,0.9,0.1,0xfff2b0,{emissive:0xffe07a,emissiveIntensity:0.15});
+        win.position.set(wx,wy,d/2+0.06);
+        g.add(win);
+      }
+    }
+    // sign
+    const sign = box(Math.min(w-0.5,5),0.8,0.2,0x24324a);
+    sign.position.set(0,1.2,d/2+0.15); g.add(sign);
+    g.position.set(x,0,z);
+    g.userData.label = label;
+    scene.add(g);
+    return g;
+  }
+  const shopData = [
+    [-28,27,6,7,5,0x8a98ad,0x6f8095,'Padaria'],
+    [-20,28,5,8,5,0x97a6bb,0x7a8a9f,'Farmácia'],
+    [-13,27,4.5,6.5,5,0x8f9db2,0x748398,'Banco'],
+    [13,27,5.5,7.5,5,0x95a3b8,0x77879b,'Loja'],
+    [20,28,5,6.5,5,0x8a99ae,0x6f8096,'Hortifruti'],
+    [27,27,6,8,5,0x97a6bb,0x7a8b9f,'Açougue'],
+  ];
+  shopData.forEach(s => makeBuilding(...s));
+
+  // simple cars
+  function makeCar(x,z,color) {
+    const g = new THREE.Group();
+    const body = box(3.2,0.8,1.6,color); body.position.y=0.7; g.add(body);
+    const top = box(1.8,0.7,1.4,0xcde7ff,{roughness:0.2,metalness:0.1}); top.position.y=1.3; g.add(top);
+    [[-1,0.35,0.8],[1,0.35,0.8],[-1,0.35,-0.8],[1,0.35,-0.8]].forEach(p=>{ const w=cyl(0.35,0.35,0.3,0x222); w.rotation.x=Math.PI/2; w.position.set(...p); g.add(w); });
+    g.position.set(x,0,z); scene.add(g); return g;
+  }
+  makeCar(-18,20,0xd94f4f); makeCar(5,20,0x4f8fd9); makeCar(24,20,0x58b06a);
+
+  // --- Supermarket ---
+  const market = new THREE.Group();
+  scene.add(market);
+  const floor = box(30,0.2,22,0xd9d2c3); floor.position.set(0,0.1,1); floor.receiveShadow=true; floor.castShadow=false; market.add(floor);
+  // floor tiles
+  for (let x=-14; x<14; x+=2) for (let z=-9; z<11; z+=2) {
+    if (((x+z)/2)%2===0) { const t=box(2,0.21,2,0xcec4b1); t.position.set(x+1,0.105,z+1); t.castShadow=false; t.receiveShadow=true; market.add(t); }
+  }
+  // walls (partial, open front)
+  const wallMatColor = 0xece6da;
+  const backWall = box(30,4,0.4,wallMatColor); backWall.position.set(0,2,-9.8); market.add(backWall);
+  const leftWall = box(0.4,4,22,wallMatColor); leftWall.position.set(-14.8,2,1); market.add(leftWall);
+  const rightWall = box(0.4,4,22,wallMatColor); rightWall.position.set(14.8,2,1); market.add(rightWall);
+  // front wall segments leaving entrance gap
+  const frontL = box(11,4,0.4,wallMatColor); frontL.position.set(-9.5,2,11.8); market.add(frontL);
+  const frontR = box(11,4,0.4,wallMatColor); frontR.position.set(9.5,2,11.8); market.add(frontR);
+  const frontTop = box(8,1.2,0.4,wallMatColor); frontTop.position.set(0,3.4,11.8); market.add(frontTop);
+  // sign
+  const signBoard = box(10,1.2,0.3,0x2f7a63); signBoard.position.set(0,4.4,11.6); market.add(signBoard);
+  // entrance mat
+  const mat = box(6,0.22,2,0x7cc89a); mat.position.set(0,0.12,11); mat.castShadow=false; market.add(mat);
+
+  // store switch
+  const switchGroup = new THREE.Group();
+  switchGroup.position.set(-3.8, 1.4, 11.55);
+  const switchBase = box(0.5,0.7,0.12,0x2b364a); switchGroup.add(switchBase);
+  storeSwitchMesh = box(0.2,0.2,0.16,0x52d1a5,{emissive:0x2fa87a,emissiveIntensity:0.5});
+  storeSwitchMesh.position.z = 0.08;
+  switchGroup.add(storeSwitchMesh);
+  market.add(switchGroup);
+
+  // cashier
+  const cashierGroup = new THREE.Group();
+  cashierGroup.position.set(8,0,5.5);
+  const counter = box(5,1.1,2.2,0x455a73); counter.position.y=0.55; cashierGroup.add(counter);
+  const register = box(0.8,0.3,0.5,0x2f4157); register.position.set(-0.8,1.25,0); cashierGroup.add(register);
+  const screen = box(0.7,0.4,0.05,0x9fe0ff,{emissive:0x7fd3ff,emissiveIntensity:0.4}); screen.position.set(-0.8,1.55,-0.1); cashierGroup.add(screen);
+  market.add(cashierGroup);
+
+  // storage
+  const storageGroup = new THREE.Group();
+  storageGroup.position.set(9.5,0,-2.5);
+  const storageFloor = box(7,0.22,7,0x8b7b67); storageFloor.position.y=0.11; storageFloor.castShadow=false; storageGroup.add(storageFloor);
+  const storageLabel = box(5,0.4,0.2,0x756754); storageLabel.position.set(0,0.5,-3.4); storageGroup.add(storageLabel);
+  market.add(storageGroup);
+
+  // Shelves and product mapping
+  const shelfDefs = [
+    { x:-8, z:3.5,  slots:['arroz','feijao'] },
+    { x:-8, z:0.5,  slots:['leite','pao'] },
+    { x:-8, z:-2.5, slots:['cafe','sabao'] },
+    { x:-8, z:-5.5, slots:['refri','biscoito'] },
+  ];
+  const shelfGroups = [];
+  const productNodes = new Map(); // pid -> {group, anchorLocalPositions}
+
+  shelfDefs.forEach(def => {
+    const sg = new THREE.Group();
+    sg.position.set(def.x,0,def.z);
+    const base = box(7.5,1.2,1.8,0x7a5a3a); base.position.y=0.6; sg.add(base);
+    const top = box(7.5,0.15,2.0,0x65492f); top.position.y=1.25; sg.add(top);
+    const back = box(7.5,2.2,0.15,0x6b5034); back.position.set(0,1.1,-0.82); sg.add(back);
+    def.slots.forEach((pid, i) => {
+      const px = -1.8 + i*3.6;
+      const pg = new THREE.Group();
+      pg.position.set(px, 1.28, 0);
+      sg.add(pg);
+      productNodes.set(pid, { group: pg, shelfX: def.x + px, shelfZ: def.z });
+    });
+    market.add(sg);
+    shelfGroups.push(sg);
+  });
+
+  function refreshShelf(pid) {
+    const node = productNodes.get(pid);
+    if (!node) return;
+    while (node.group.children.length) node.group.remove(node.group.children[0]);
+    const p = PRODUCTS.find(x=>x.id===pid);
+    const n = Math.min(6, Math.ceil(p.stock/2));
+    for (let i=0;i<n;i++) {
+      const item = box(0.55,0.7,0.45,p.color,{roughness:0.7});
+      item.position.set((i%3)*0.62 - 0.62, 0.35, Math.floor(i/3)*0.55 - 0.25);
+      node.group.add(item);
+    }
+  }
+  PRODUCTS.forEach(p => refreshShelf(p.id));
+
+  // --- 3D entity helpers ---
+  const customerMeshes = new Map(); // id -> group
+  const boxMeshes = new Map(); // id -> mesh
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+
+  function makeCustomerMesh(c) {
+    const g = new THREE.Group();
+    const body = cyl(0.35,0.35,1.0, c.color); body.position.y = 0.8; g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 16), new THREE.MeshStandardMaterial({color:0xe8c9a0, roughness:0.8}));
+    head.position.y = 1.55; head.castShadow=true; g.add(head);
+    const bag = box(0.35,0.25,0.25,0x3a4657); bag.position.set(0.45,0.9,0); bag.visible=false; g.add(bag);
+    g.userData.bag = bag;
+    g.position.set(c.x,0,c.z);
+    scene.add(g);
+    customerMeshes.set(c.id, g);
+    return g;
+  }
+
+  function removeCustomerMesh(id) {
+    const g = customerMeshes.get(id);
+    if (g) { scene.remove(g); customerMeshes.delete(id); }
+  }
+
+  function makeBoxMesh(b) {
+    const p = PRODUCTS.find(x=>x.id===b.pid);
+    const m = box(0.9,0.6,0.7,0xc89b5d);
+    m.position.set(b.x,0.41,b.z);
+    m.userData.boxId = b.id;
+    m.userData.pid = b.pid;
+    // tape
+    const tape1 = box(0.92,0.05,0.1,0x8a6838); tape1.position.y=0; m.add(tape1);
+    const tape2 = box(0.1,0.05,0.72,0x8a6838); tape2.position.y=0; m.add(tape2);
+    boxMeshes.set(b.id, m);
+    scene.add(m);
+    // small label color marker
+    const mark = box(0.3,0.05,0.3,p.color); mark.position.set(0,0.31,0); mark.castShadow=false; m.add(mark);
+    return m;
+  }
+  function removeBoxMesh(id) {
+    const m = boxMeshes.get(id);
+    if (m) { scene.remove(m); boxMeshes.delete(id); }
+  }
+
+  // --- Game logic ---
+  function shelfPos(pid) {
+    const node = productNodes.get(pid);
+    if (!node) return {x:0,z:0};
+    return { x: node.shelfX, z: node.shelfZ + 1.4 };
+  }
+
+  function spawnCustomer() {
+    const name = choice(['Ana','Bruno','Carla','Diego','Eva','Felipe','Gabi','Hugo','Iara','João','Lia','Marcos','Nina','Otávio','Paula']);
+    const available = PRODUCTS.filter(p=>p.stock>0);
+    const count = Math.min(available.length, Math.floor(rand(1,4.5)));
+    const pool = [...available];
+    const wants = [];
+    for (let i=0;i<count;i++) {
+      if (!pool.length) break;
+      const idx = Math.floor(Math.random()*pool.length);
+      const p = pool.splice(idx,1)[0];
+      const qty = 1 + (Math.random()<0.25?1:0);
+      wants.push({id:p.id, qty:Math.min(qty,p.stock)});
+    }
+    if (!wants.length) return;
+    const c = {
+      id: state.customerSeq++, name,
+      x: rand(-1.5,1.5), z: 10.5,
+      tx: rand(-1.5,1.5), tz: 8.5,
+      color: new THREE.Color().setHSL(Math.random(),0.55,0.72).getHex(),
+      wants, cart: [], stage:'enter', wait:0, targetIdx:0, pay:0, total:0,
+    };
+    state.customers.push(c);
+    makeCustomerMesh(c);
+    log(`${c.name} entrou no mercado.`);
+  }
+
+  function chooseNextTarget(c) {
+    if (c.targetIdx < c.wants.length) {
+      const w = c.wants[c.targetIdx];
+      const pos = shelfPos(w.id);
+      c.tx = pos.x; c.tz = pos.z;
+      c.stage = 'shop';
+      return;
+    }
+    c.stage = 'toQueue';
+  }
+
+  function updateCustomer(c, dt) {
+    const speed = 3.2;
+    const moveTo = (tx,tz) => {
+      const dx=tx-c.x, dz=tz-c.z, d=Math.hypot(dx,dz);
+      if (d < 0.08) { c.x=tx; c.z=tz; return true; }
+      c.x += dx/d*speed*dt; c.z += dz/d*speed*dt;
+      return false;
+    };
+    const mesh = customerMeshes.get(c.id);
+
+    if (c.stage === 'enter') {
+      if (moveTo(c.tx,c.tz)) { c.stage='picking'; chooseNextTarget(c); }
+    } else if (c.stage === 'shop') {
+      if (moveTo(c.tx,c.tz)) { c.stage='grab'; c.wait = 0.6 + Math.random()*0.7; }
+    } else if (c.stage === 'grab') {
+      c.wait -= dt;
+      if (c.wait <= 0) {
+        const w = c.wants[c.targetIdx];
+        const p = PRODUCTS.find(x=>x.id===w.id);
+        const take = Math.min(w.qty, p.stock);
+        if (take > 0) {
+          p.stock -= take;
+          c.cart.push({id:p.id,name:p.name,qty:take,price:p.price});
+          refreshShelf(p.id);
+          if (mesh) mesh.userData.bag.visible = true;
+          addFloat(`+${take} ${p.name}`, new THREE.Vector3(c.x,1.8,c.z), '#cfe8ff');
+        }
+        c.targetIdx++;
+        if (c.targetIdx < c.wants.length) chooseNextTarget(c);
+        else c.stage = 'toQueue';
+      }
+    } else if (c.stage === 'toQueue' || c.stage === 'queue' || c.stage === 'checkout') {
+      const queue = state.customers.filter(x=>x.stage==='queue'||x.stage==='checkout'||x.stage==='toQueue');
+      const pos = queue.indexOf(c);
+      const qx = 5.5 - pos*1.1;
+      const qz = 6.8;
+      c.tx = qx; c.tz = qz;
+      const at = moveTo(c.tx,c.tz);
+      if (c.stage === 'toQueue' && at) c.stage = pos===0 ? 'checkout' : 'queue';
+      if (c.stage === 'queue') {
+        if (pos===0 && !state.checkout) c.stage='checkout';
+      }
+      // checkout opens only when player activates it via panel/button
+    } else if (c.stage === 'leaving' || c.stage === 'angry') {
+      c.tx = 0; c.tz = 12.5;
+      if (moveTo(c.tx,c.tz)) c.stage = 'gone';
+    }
+
+    if (mesh) {
+      mesh.position.set(c.x,0,c.z);
+      const dx = c.tx-c.x, dz=c.tz-c.z;
+      if (Math.hypot(dx,dz) > 0.01) mesh.rotation.y = Math.atan2(dx,dz);
+    }
+  }
+
+  function openCheckout(c) {
+    if (state.checkout) return;
+    if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+    c.total = c.cart.reduce((s,i)=>s+i.price*i.qty,0);
+    const notes = [5,10,20,50,100,200];
+    let pay = notes.find(n=>n>=c.total) || Math.ceil(c.total/10)*10;
+    if (Math.random()<0.25) { const next = notes.find(n=>n>pay); if (next) pay = next; }
+    c.pay = pay;
+    state.checkout = { customerId:c.id, total:c.total, pay:c.pay, change:+(c.pay-c.total).toFixed(2) };
+    state.pausedForCheckout = true;
+    renderCheckout();
+    checkoutModal.classList.add('show');
+    changeInput.value = '';
+    checkoutFeedback.textContent = ''; checkoutFeedback.className='feedback';
+    setTimeout(()=>changeInput.focus(), 50);
+  }
+
+  function renderCheckout() {
+    const ck = state.checkout; if (!ck) return;
+    const c = state.customers.find(x=>x.id===ck.customerId);
+    receiptEl.innerHTML = '';
+    const title = document.createElement('div');
+    title.style.fontWeight='700'; title.style.marginBottom='6px'; title.textContent='SUPERMERCADO DA VILA';
+    receiptEl.appendChild(title);
+    c.cart.forEach(it => {
+      const line = document.createElement('div'); line.className='line';
+      line.innerHTML = `<span>${it.qty}x ${it.name}</span><span>${fmt(it.price*it.qty)}</span>`;
+      receiptEl.appendChild(line);
+    });
+    const total = document.createElement('div'); total.className='line total';
+    total.innerHTML = `<span>TOTAL</span><span>${fmt(ck.total)}</span>`;
+    receiptEl.appendChild(total);
+    paidAmountEl.textContent = fmt(ck.pay);
+    const q = document.getElementById('quickCash'); q.innerHTML='';
+    const opts = [...new Set([ck.change, +(ck.change+1).toFixed(2), +(ck.change-1).toFixed(2), +(ck.change+5).toFixed(2)].filter(v=>v>=0))].slice(0,4);
+    opts.forEach(v => { const b=document.createElement('button'); b.textContent=fmt(v); b.onclick=()=>changeInput.value=v.toFixed(2); q.appendChild(b); });
+  }
+
+  function closeCheckoutUI() { checkoutModal.classList.remove('show'); state.pausedForCheckout = false; }
+  function finishCheckout(success) {
+    const ck = state.checkout; if (!ck) return;
+    const c = state.customers.find(x=>x.id===ck.customerId);
+    if (c) {
+      if (success) {
+        state.money += ck.total;
+        state.reputation = clamp(state.reputation + 1.5, 0, 100);
+        addFloat(`+${fmt(ck.total)}`, new THREE.Vector3(8,2.2,5.5), '#7ce0b8');
+        log(`${c.name} pagou ${fmt(ck.total)}. Troco correto: ${fmt(ck.change)}.`);
+        c.stage = 'leaving';
+      } else {
+        state.reputation = clamp(state.reputation - 8, 0, 100);
+        addFloat('Troco errado!', new THREE.Vector3(8,2.2,5.5), '#ff8d8d');
+        log(`${c.name} recebeu troco errado. Reputação caiu.`);
+        c.stage = 'angry';
+      }
+    }
+    state.checkout = null;
+    closeCheckoutUI();
+    renderStockList();
+    updateHUD();
+  }
+
+  document.getElementById('confirmChange').onclick = () => {
+    const ck = state.checkout; if (!ck) return;
+    const val = parseFloat(String(changeInput.value).replace(',', '.'));
+    if (Number.isNaN(val)) { checkoutFeedback.textContent='Digite um valor válido.'; checkoutFeedback.className='feedback bad'; return; }
+    const ok = Math.abs(val - ck.change) < 0.009;
+    if (ok) { checkoutFeedback.textContent='Troco correto!'; checkoutFeedback.className='feedback good'; setTimeout(()=>finishCheckout(true), 350); }
+    else { checkoutFeedback.textContent=`Troco incorreto. O correto era ${fmt(ck.change)}.`; checkoutFeedback.className='feedback bad'; setTimeout(()=>finishCheckout(false), 900); }
+  };
+  document.getElementById('closeCheckout').onclick = () => {
+    if (!state.checkout) return closeCheckoutUI();
+    checkoutFeedback.textContent='Caixa fechado sem troco!'; checkoutFeedback.className='feedback bad';
+    setTimeout(()=>finishCheckout(false), 600);
+  };
+  function updateStoreUI() {
+    storeStatus.textContent = state.storeOpen ? 'Loja aberta: clientes podem entrar.' : 'Loja fechada: nenhum cliente novo entra.';
+    storeBtn.textContent = state.storeOpen ? 'Fechar loja' : 'Abrir loja';
+    storeBtn.classList.toggle('primary', !state.storeOpen);
+    if (storeSwitchMesh) {
+      storeSwitchMesh.material.color.setHex(state.storeOpen ? 0x52d1a5 : 0xff7373);
+      storeSwitchMesh.material.emissive.setHex(state.storeOpen ? 0x2fa87a : 0xaa3333);
+    }
+  }
+  storeBtn.onclick = () => {
+    state.storeOpen = !state.storeOpen;
+    updateStoreUI();
+    log(state.storeOpen ? 'Loja aberta.' : 'Loja fechada.');
+  };
+
+  document.getElementById('attendBtn').onclick = () => {
+    const c = state.customers.find(x=>x.stage==='checkout') || state.customers.find(x=>x.stage==='queue');
+    if (c) { c.stage='checkout'; c.tx=5.5; c.tz=6.8; openCheckout(c); }
+  };
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); document.getElementById('attendBtn').click(); }
+    if (e.key === 'Enter' && checkoutModal.classList.contains('show')) document.getElementById('confirmChange').click();
+  });
+
+  function renderStockList() {
+    stockList.innerHTML = '';
+    PRODUCTS.forEach(p => {
+      const boxQty = 6;
+      const cost = +(p.cost*boxQty).toFixed(2);
+      const div = document.createElement('div');
+      div.className = 'stock-item';
+      div.innerHTML = `<div><div><b>${p.name}</b> <span style="color:#9fb0ca">(${p.stock}/${p.max})</span></div><div class="meta">Venda ${fmt(p.price)} | Caixa ${boxQty}un: ${fmt(cost)}</div></div>`;
+      const btn = document.createElement('button');
+      btn.textContent = 'Comprar caixa';
+      btn.disabled = state.money < cost;
+      btn.onclick = () => buyStock(p.id);
+      div.appendChild(btn);
+      stockList.appendChild(div);
+    });
+  }
+
+  function renderBoxList() {
+    boxList.innerHTML = '';
+    if (!state.boxes.length) {
+      boxList.innerHTML = '<div class="small" style="color:#9fb0ca">Nenhuma caixa no depósito.</div>';
+      return;
+    }
+    state.boxes.forEach(b => {
+      const p = PRODUCTS.find(x=>x.id===b.pid);
+      const div = document.createElement('div');
+      div.className = 'stock-item';
+      div.innerHTML = `<div><div><b>Caixa: ${p.name}</b></div><div class="meta">${b.qty} un na caixa</div></div>`;
+      const btn = document.createElement('button');
+      btn.textContent = 'Desempacotar';
+      btn.onclick = () => unpackBox(b);
+      div.appendChild(btn);
+      boxList.appendChild(div);
+    });
+  }
+
+  function buyStock(pid) {
+    const p = PRODUCTS.find(x=>x.id===pid);
+    const boxQty = 6;
+    const cost = +(p.cost*boxQty).toFixed(2);
+    if (state.money < cost) { log(`Dinheiro insuficiente para caixa de ${p.name}.`); addFloat('Sem dinheiro', new THREE.Vector3(9,2,-2), '#ff8d8d'); return; }
+    state.money -= cost;
+    state.deliveryTruck = { x:-30, z:20, targetX:18, phase:'arrive', timer:0, payload:{pid, qty:boxQty}, mesh:null };
+    // truck mesh
+    const tg = new THREE.Group();
+    const body = box(4.5,1.4,2.2,0xf0f0f0); body.position.y=1.1; tg.add(body);
+    const cab = box(1.8,1.6,2.1,0x3b82c4); cab.position.set(3.0,1.2,0); tg.add(cab);
+    const win = box(0.1,0.7,1.2,0xdff3ff,{roughness:0.2}); win.position.set(3.95,1.45,0); tg.add(win);
+    [[-1.5,0.4,1.1],[1.5,0.4,1.1],[3.2,0.4,1.1],[-1.5,0.4,-1.1],[1.5,0.4,-1.1],[3.2,0.4,-1.1]].forEach(pw=>{ const w=cyl(0.4,0.4,0.25,0x222); w.rotation.x=Math.PI/2; w.position.set(...pw); tg.add(w); });
+    tg.position.set(state.deliveryTruck.x,0,state.deliveryTruck.z);
+    scene.add(tg);
+    state.deliveryTruck.mesh = tg;
+    log(`Pedido: caixa de ${p.name} (${boxQty} un) por ${fmt(cost)}. Caminhão a caminho.`);
+    renderStockList(); updateHUD();
+  }
+
+  function spawnBox(pid, qty) {
+    const p = PRODUCTS.find(x=>x.id===pid);
+    const b = {
+      id: Math.random().toString(36).slice(2),
+      pid, qty,
+      x: 7.5 + Math.random()*4,
+      z: -4.5 + Math.random()*4,
+    };
+    state.boxes.push(b);
+    makeBoxMesh(b);
+    addFloat('Caixa entregue', new THREE.Vector3(b.x,1.2,b.z), '#f6c85f');
+    log(`Caixa de ${p.name} chegou ao depósito.`);
+    renderBoxList();
+  }
+
+  function unpackBox(boxObj) {
+    const p = PRODUCTS.find(x=>x.id===boxObj.pid);
+    const space = p.max - p.stock;
+    if (space <= 0) { log(`Prateleira de ${p.name} cheia.`); addFloat('Prateleira cheia', new THREE.Vector3(boxObj.x,1.2,boxObj.z), '#ff8d8d'); return; }
+    const moved = Math.min(space, boxObj.qty);
+    p.stock += moved;
+    boxObj.qty -= moved;
+    refreshShelf(p.id);
+    addFloat(`+${moved} ${p.name}`, new THREE.Vector3(boxObj.x,1.2,boxObj.z), '#7ce0b8');
+    log(`Reposição: ${moved}x ${p.name}.`);
+    if (boxObj.qty <= 0) {
+      removeBoxMesh(boxObj.id);
+      state.boxes = state.boxes.filter(b=>b!==boxObj);
+    }
+    renderStockList(); renderBoxList(); updateHUD();
+  }
+
+  function getInteractionTarget() {
+    if (cam.mode !== 'fps' || state.pausedForCheckout) return null;
+    pointer.x = 0; pointer.y = 0;
+    raycaster.setFromCamera(pointer, camera);
+    raycaster.far = 3.2;
+
+    // boxes
+    const boxHits = raycaster.intersectObjects([...boxMeshes.values()], true);
+    if (boxHits.length) {
+      let obj = boxHits[0].object;
+      while (obj && !obj.userData.boxId) obj = obj.parent;
+      if (obj && obj.userData.boxId) {
+        const b = state.boxes.find(x=>x.id===obj.userData.boxId);
+        if (b) return { type:'box', box:b, label:'[E] Desempacotar caixa' };
+      }
+    }
+
+    // customers at checkout/queue or cashier counter
+    const custHits = raycaster.intersectObjects([...customerMeshes.values()], true);
+    if (custHits.length) {
+      let obj = custHits[0].object;
+      while (obj && ![...customerMeshes.values()].includes(obj)) obj = obj.parent;
+      if (obj) {
+        const id = [...customerMeshes.entries()].find(([k,v])=>v===obj)?.[0];
+        const c = state.customers.find(x=>x.id===id);
+        if (c && (c.stage==='checkout' || c.stage==='queue')) return { type:'cashier', customer:c, label:'[E] Atender caixa' };
+      }
+    }
+    const cashierHits = raycaster.intersectObjects(cashierGroup.children, true);
+    if (cashierHits.length) {
+      const c = state.customers.find(x=>x.stage==='checkout') || state.customers.find(x=>x.stage==='queue');
+      if (c) return { type:'cashier', customer:c, label:'[E] Atender caixa' };
+    }
+
+    // store switch
+    if (storeSwitchMesh) {
+      const swHits = raycaster.intersectObject(storeSwitchMesh, true);
+      if (swHits.length) return { type:'store', label: state.storeOpen ? '[E] Fechar loja' : '[E] Abrir loja' };
+    }
+
+    raycaster.far = Infinity;
+    return null;
+  }
+
+  function updateInteraction() {
+    interactTarget = getInteractionTarget();
+    if (interactTarget) {
+      promptEl.textContent = interactTarget.label;
+      promptEl.style.display = 'block';
+      const mobile = matchMedia('(pointer: coarse)').matches || !matchMedia('(pointer: fine)').matches;
+      actionBtn.classList.toggle('show', mobile);
+      actionBtn.textContent = interactTarget.type === 'box' ? 'Pegar' : interactTarget.type === 'cashier' ? 'Atender' : (state.storeOpen ? 'Fechar' : 'Abrir');
+    } else {
+      promptEl.style.display = 'none';
+      actionBtn.classList.remove('show');
+    }
+    raycaster.far = Infinity;
+  }
+
+  function doInteract() {
+    if (!interactTarget) return;
+    if (interactTarget.type === 'box') {
+      unpackBox(interactTarget.box);
+    } else if (interactTarget.type === 'cashier') {
+      const c = interactTarget.customer;
+      if (c && (c.stage==='checkout' || c.stage==='queue')) { c.stage='checkout'; c.tx=5.5; c.tz=6.8; openCheckout(c); }
+    } else if (interactTarget.type === 'store') {
+      state.storeOpen = !state.storeOpen;
+      updateStoreUI();
+      if (storeSwitchMesh) storeSwitchMesh.material.color.setHex(state.storeOpen ? 0x52d1a5 : 0xff7373);
+      if (storeSwitchMesh) storeSwitchMesh.material.emissive.setHex(state.storeOpen ? 0x2fa87a : 0xaa3333);
+      log(state.storeOpen ? 'Loja aberta.' : 'Loja fechada.');
+    }
+    updateInteraction();
+  }
+
+  // Raycast click (somente no modo órbita; 1ª pessoa é só movimentação)
+  renderer.domElement.addEventListener('click', (e) => {
+    if (cam.mode === 'fps') {
+      renderer.domElement.requestPointerLock?.();
+      return;
+    }
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+
+    // boxes
+    const boxHits = raycaster.intersectObjects([...boxMeshes.values()], true);
+    if (boxHits.length) {
+      let obj = boxHits[0].object;
+      while (obj && !obj.userData.boxId) obj = obj.parent;
+      if (obj && obj.userData.boxId) {
+        const b = state.boxes.find(x=>x.id===obj.userData.boxId);
+        if (b) { unpackBox(b); return; }
+      }
+    }
+
+    // customers at checkout
+    const custHits = raycaster.intersectObjects([...customerMeshes.values()], true);
+    if (custHits.length) {
+      let obj = custHits[0].object;
+      while (obj && ![...customerMeshes.values()].includes(obj)) obj = obj.parent;
+      if (obj) {
+        const id = [...customerMeshes.entries()].find(([k,v])=>v===obj)?.[0];
+        const c = state.customers.find(x=>x.id===id);
+        if (c && (c.stage==='checkout' || c.stage==='queue') && !state.checkout) { openCheckout(c); return; }
+      }
+    }
+  });
+
+  const COLLIDERS = [
+    // supermarket walls
+    { minX:-15.2, maxX:15.2, minZ:-10.2, maxZ:-9.4 },
+    { minX:-15.2, maxX:-14.4, minZ:-10.2, maxZ:12.2 },
+    { minX:14.4, maxX:15.2, minZ:-10.2, maxZ:12.2 },
+    { minX:-15.2, maxX:-3.8, minZ:11.4, maxZ:12.2 },
+    { minX:3.8, maxX:15.2, minZ:11.4, maxZ:12.2 },
+    // shelves
+    { minX:-11.9, maxX:-4.1, minZ:2.5, maxZ:4.5 },
+    { minX:-11.9, maxX:-4.1, minZ:-0.5, maxZ:1.5 },
+    { minX:-11.9, maxX:-4.1, minZ:-3.5, maxZ:-1.5 },
+    { minX:-11.9, maxX:-4.1, minZ:-6.5, maxZ:-4.5 },
+    // cashier counter
+    { minX:5.3, maxX:10.7, minZ:4.2, maxZ:6.8 },
+    // city buildings
+    { minX:-31, maxX:-25, minZ:24.5, maxZ:29.5 },
+    { minX:-22.5, maxX:-17.5, minZ:25.5, maxZ:30.5 },
+    { minX:-15.25, maxX:-10.75, minZ:24.5, maxZ:29.5 },
+    { minX:10.25, maxX:15.75, minZ:24.5, maxZ:29.5 },
+    { minX:17.5, maxX:22.5, minZ:25.5, maxZ:30.5 },
+    { minX:24, maxX:30, minZ:24.5, maxZ:29.5 },
+    // cars
+    { minX:-19.7, maxX:-16.3, minZ:19.1, maxZ:20.9 },
+    { minX:3.3, maxX:6.7, minZ:19.1, maxZ:20.9 },
+    { minX:22.3, maxX:25.7, minZ:19.1, maxZ:20.9 },
+  ];
+  const PLAYER_R = 0.42;
+  function resolveCollisionsAxis(pos) {
+    for (const c of COLLIDERS) {
+      const nx = clamp(pos.x, c.minX, c.maxX);
+      const nz = clamp(pos.z, c.minZ, c.maxZ);
+      const dx = pos.x - nx;
+      const dz = pos.z - nz;
+      const distSq = dx*dx + dz*dz;
+      if (distSq < PLAYER_R*PLAYER_R && distSq > 0.000001) {
+        const dist = Math.sqrt(distSq);
+        const push = PLAYER_R - dist;
+        pos.x += (dx/dist) * push;
+        pos.z += (dz/dist) * push;
+      } else if (distSq <= 0.000001) {
+        // inside collider center fallback
+        const left = pos.x - c.minX, right = c.maxX - pos.x, top = pos.z - c.minZ, bottom = c.maxZ - pos.z;
+        const m = Math.min(left,right,top,bottom);
+        if (m === left) pos.x = c.minX - PLAYER_R;
+        else if (m === right) pos.x = c.maxX + PLAYER_R;
+        else if (m === top) pos.z = c.minZ - PLAYER_R;
+        else pos.z = c.maxZ + PLAYER_R;
+      }
+    }
+  }
+
+  const walkVel = new THREE.Vector3();
+  function updateFPS(dt) {
+    if (cam.mode !== 'fps') return;
+    if (state.pausedForCheckout) { walkVel.set(0,0,0); updateFpsCamera(); return; }
+    const forward = new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
+    const right = new THREE.Vector3(forward.z, 0, -forward.x);
+    const move = new THREE.Vector3();
+    if (cam.keys['KeyW'] || cam.keys['ArrowUp']) move.add(forward);
+    if (cam.keys['KeyS'] || cam.keys['ArrowDown']) move.sub(forward);
+    if (cam.keys['KeyD'] || cam.keys['ArrowRight']) move.add(right);
+    if (cam.keys['KeyA'] || cam.keys['ArrowLeft']) move.sub(right);
+    if (move.lengthSq() > 0) move.normalize();
+    if (Math.abs(joy.dx) > 0.01 || Math.abs(joy.dy) > 0.01) {
+      move.add(forward.clone().multiplyScalar(-joy.dy));
+      move.add(right.clone().multiplyScalar(joy.dx));
+    }
+    const sprint = (cam.keys['ShiftLeft'] || cam.keys['ShiftRight']) ? 1.6 : 1;
+    const maxSpeed = cam.speed * sprint;
+    if (move.lengthSq() > 0) {
+      const len = Math.min(1, move.length());
+      move.normalize().multiplyScalar(maxSpeed * len);
+      walkVel.lerp(move, 1 - Math.exp(-14 * dt));
+    } else {
+      walkVel.multiplyScalar(Math.exp(-12 * dt));
+      if (walkVel.lengthSq() < 0.0001) walkVel.set(0,0,0);
+    }
+
+    // axis-separated movement for wall sliding
+    fpsPos.x += walkVel.x * dt;
+    resolveCollisionsAxis(fpsPos);
+    fpsPos.z += walkVel.z * dt;
+    resolveCollisionsAxis(fpsPos);
+
+    // map bounds (whole playable area)
+    fpsPos.x = clamp(fpsPos.x, -38, 38);
+    fpsPos.z = clamp(fpsPos.z, -9.2, 32);
+    fpsPos.y = cam.height;
+    updateFpsCamera();
+  }
+
+  function update(dt) {
+    if (state.pausedForCheckout) return;
+    state.minutes += dt * 6;
+    if (state.minutes >= 22*60) {
+      state.minutes = 8*60; state.day++;
+      state.reputation = clamp(state.reputation + 5, 0, 100);
+      log(`Novo dia. Reputação: ${Math.round(state.reputation)}%.`);
+    }
+
+    state.nextCustomerIn -= dt;
+    if (state.nextCustomerIn <= 0) {
+      if (state.storeOpen && PRODUCTS.some(p=>p.stock>0)) spawnCustomer();
+      state.nextCustomerIn = clamp(rand(4,8) - state.reputation/50, 2.2, 8);
+    }
+
+    const t = state.deliveryTruck;
+    if (t) {
+      if (t.phase==='arrive') {
+        t.x += 8*dt; t.mesh.position.x = t.x;
+        if (t.x >= t.targetX) { t.x=t.targetX; t.phase='unload'; t.timer=1.2; }
+      } else if (t.phase==='unload') {
+        t.timer -= dt;
+        if (t.timer <= 0) { spawnBox(t.payload.pid, t.payload.qty); t.phase='leave'; }
+      } else if (t.phase==='leave') {
+        t.x += 10*dt; t.mesh.position.x = t.x;
+        if (t.x > 45) { scene.remove(t.mesh); state.deliveryTruck = null; }
+      }
+    }
+
+    state.customers.forEach(c=>updateCustomer(c,dt));
+    state.customers.filter(c=>c.stage==='gone').forEach(c=>removeCustomerMesh(c.id));
+    state.customers = state.customers.filter(c=>c.stage!=='gone');
+
+    // Caixa é ativado manualmente pelo jogador (botão Atender próximo)
+
+    updateHUD();
+  }
+
+  function onResize() {
+    const w = view.clientWidth, h = view.clientHeight;
+    renderer.setSize(w,h);
+    camera.aspect = w/h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', onResize);
+
+  // Init
+  renderStockList();
+  renderBoxList();
+  updateStoreUI();
+  updateHUD();
+  log('Bem-vindo ao Supermercado 3D!');
+  spawnBox('arroz',6); spawnBox('leite',6); spawnBox('pao',6);
+  setCameraMode('fps');
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now-last)/1000, 0.05);
+    last = now;
+    update(dt);
+    updateFPS(dt);
+    updateInteraction();
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  window.__super3d = { state, PRODUCTS, scene };
+})();
+</script>
+</body>
+</html>
