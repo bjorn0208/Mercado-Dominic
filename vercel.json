@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/simulador-supermercado-3d.html" }
+  ]
+}
