@@ -4944,6 +4944,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   //  LOOP
   // ============================================================
   let lastTime = performance.now();
+  let lastFrameMark = performance.now();
+  let frameEma = 16.6;
+  let perfCheckT = 0;
+  let degraded = false;
+  let pixelRatioBase = Math.min(window.devicePixelRatio || 1, isTouch ? 1.2 : 1.8);
   let hudTimer = 0, envTimer = 0, guideTime = 0, doorOpen = 0;
 
   function animate(now) {
@@ -4951,6 +4956,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     try {
     const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000)) || 0;
     lastTime = now;
+    const realDt = Math.min(0.1, Math.max(0, (now - lastFrameMark) / 1000));
+    lastFrameMark = now;
+    frameEma = frameEma * 0.94 + realDt * 0.06;
     guideTime += dt;
     const paused = isPaused();
 
@@ -5002,6 +5010,25 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     updateCashier(dt);
     updateCamera(dt);
     updateGuide(dt, guideTime);
+
+    // govêrna de performance: reduz pixel ratio / sombras se frames ficarem lentos
+    perfCheckT += dt;
+    if (perfCheckT > 5) {
+      perfCheckT = 0;
+      if (frameEma > 0.030) {
+        if (!degraded) {
+          degraded = true;
+          renderer.shadowMap.enabled = false;
+          renderer.setPixelRatio(Math.max(1, pixelRatioBase * 0.85));
+          console.warn('PERF: degradando qualidade (frame lento detectado).');
+        }
+      } else if (degraded && frameEma < 0.022) {
+        degraded = false;
+        renderer.shadowMap.enabled = settings.shadows;
+        renderer.setPixelRatio(pixelRatioBase);
+        console.warn('PERF: qualidade restaurada.');
+      }
+    }
 
     hudTimer += dt;
     if (hudTimer > 0.2) {
